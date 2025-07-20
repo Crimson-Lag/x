@@ -1,4 +1,4 @@
--- Pet Mutation Finder with Styled ESP + Credit Footer
+-- Pet Mutation Finder: Fixed for one ESP active at a time
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
@@ -6,24 +6,26 @@ local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
+-- 🧬 Mutation types
 local mutations = {
-    "Shiny", "Inverted", "Frozen", "Windy", "Golden", "Mega", "Tiny",
-    "Tranquil", "IronSkin", "Radiant", "Rainbow", "Shocked", "Ascended"
+	"Shiny", "Inverted", "Frozen", "Windy", "Golden", "Mega", "Tiny",
+	"Tranquil", "IronSkin", "Radiant", "Rainbow", "Shocked", "Ascended"
 }
 local currentMutation = mutations[math.random(#mutations)]
 local espVisible = true
 
+-- 🖥️ GUI Setup
 local gui = Instance.new("ScreenGui")
 gui.Name = "PetMutationFinder"
 gui.ResetOnSpawn = false
 gui.Parent = PlayerGui
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 220, 0, 120) -- Adjusted height for better fit
+frame.Size = UDim2.new(0, 220, 0, 120)
 frame.Position = UDim2.new(0.4, 0, 0.4, 0)
-frame.BackgroundColor3 = Color3.fromRGB(0, 128, 128) -- Teal color
-frame.BackgroundTransparency = 0.1 -- Retain transparency
-frame.BorderSizePixel = 0 -- No border
+frame.BackgroundColor3 = Color3.fromRGB(0, 128, 128)
+frame.BackgroundTransparency = 0.1
+frame.BorderSizePixel = 0
 frame.Active = true
 frame.Draggable = true
 frame.Parent = gui
@@ -31,12 +33,13 @@ frame.Parent = gui
 Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 12)
 
 local title = Instance.new("TextLabel", frame)
-title.Size = UDim2.new(1, 0, 0, 30) -- Adjusted height
+title.Size = UDim2.new(1, 0, 0, 30)
 title.Text = "🔬 Pet Mutation Finder"
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
 title.BackgroundTransparency = 1
-title.Font = Enum.Font.FredokaOne -- Updated font
+title.Font = Enum.Font.FredokaOne
 title.TextSize = 18
+title.Parent = frame
 
 -- ❌ Close Button
 local closeBtn = Instance.new("TextButton")
@@ -65,18 +68,21 @@ end)
 
 closeBtn.MouseButton1Click:Connect(function()
 	gui:Destroy()
+	removeAllMutationESP()
 end)
 
+-- 🎛️ Button creator
 local function createButton(text, yPos, color)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0.9, 0, 0, 35)
 	btn.Position = UDim2.new(0.05, 0, 0, yPos)
 	btn.BackgroundColor3 = color
 	btn.Text = text
-	btn.Font = Enum.Font.FredokaOne -- Updated font
+	btn.Font = Enum.Font.FredokaOne
 	btn.TextSize = 16
-	btn.TextColor3 = Color3.new(1, 1, 1) -- White text color
+	btn.TextColor3 = Color3.new(1, 1, 1)
 	btn.AutoButtonColor = false
+	btn.Parent = frame
 
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 	local stroke = Instance.new("UIStroke", btn)
@@ -90,74 +96,101 @@ local function createButton(text, yPos, color)
 		TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = color}):Play()
 	end)
 
-	btn.Parent = frame
 	return btn
 end
 
-local reroll = createButton("🎲 Mutation Reroll", 40, Color3.fromRGB(128, 0, 128)) -- Purple color
-local toggle = createButton("👁 Toggle Mutation ESP", 80, Color3.fromRGB(128, 128, 0)) -- Olive color
+local rerollBtn = createButton("🎲 Mutation Reroll", 40, Color3.fromRGB(128, 0, 128))
+local toggleBtn = createButton("👁 Toggle Mutation ESP", 80, Color3.fromRGB(128, 128, 0))
 
-
--- 🔍 Find mutation machine
-local function findMachine()
+-- 🔍 Find all mutation machines
+local function getMutationMachines()
+	local results = {}
 	for _, obj in pairs(Workspace:GetDescendants()) do
 		if obj:IsA("Model") and obj.Name:lower():find("mutation") then
-			return obj
+			local part = obj:FindFirstChildWhichIsA("BasePart")
+			if part then
+				table.insert(results, part)
+			end
 		end
 	end
+	return results
 end
 
-local machine = findMachine()
-if not machine or not machine:FindFirstChildWhichIsA("BasePart") then
-	warn("Pet Mutation Machine not found.")
-	return
-end
+-- 💡 ESP manager
+local activeESP -- track current ESP so only one is shown
 
-local basePart = machine:FindFirstChildWhichIsA("BasePart")
-
--- 💡 Stylish ESP
-local espGui = Instance.new("BillboardGui", basePart)
-espGui.Name = "MutationESP"
-espGui.Adornee = basePart
-espGui.Size = UDim2.new(0, 200, 0, 40)
-espGui.StudsOffset = Vector3.new(0, 3, 0)
-espGui.AlwaysOnTop = true
-
-local espLabel = Instance.new("TextLabel", espGui)
-espLabel.Size = UDim2.new(1, 0, 1, 0)
-espLabel.BackgroundTransparency = 1
-espLabel.Font = Enum.Font.GothamBold
-espLabel.TextSize = 24
-espLabel.TextStrokeTransparency = 0.3
-espLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
-espLabel.Text = currentMutation
-
--- 🌈 Animate rainbow color
-local hue = 0
-RunService.RenderStepped:Connect(function()
-	if espVisible then
-		hue = (hue + 0.01) % 1
-		espLabel.TextColor3 = Color3.fromHSV(hue, 1, 1)
+local function removeAllMutationESP()
+	if activeESP then
+		activeESP:Destroy()
+		activeESP = nil
 	end
-end)
+end
 
--- ♻️ Reroll effect
+local function applyMutationESP(part)
+	removeAllMutationESP()
+	local gui = Instance.new("BillboardGui", part)
+	gui.Name = "MutationESP"
+	gui.Adornee = part
+	gui.Size = UDim2.new(0, 200, 0, 40)
+	gui.StudsOffset = Vector3.new(0, 3, 0)
+	gui.AlwaysOnTop = true
+
+	local label = Instance.new("TextLabel", gui)
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 24
+	label.TextStrokeTransparency = 0.3
+	label.TextStrokeColor3 = Color3.new(0, 0, 0)
+	label.Text = currentMutation
+
+	activeESP = gui
+
+	-- 🌈 Rainbow animation
+	local hue = 0
+	local connection
+	connection = RunService.RenderStepped:Connect(function()
+		if not gui or not gui.Parent then
+			connection:Disconnect()
+			return
+		end
+		if espVisible then
+			hue = (hue + 0.01) % 1
+			label.TextColor3 = Color3.fromHSV(hue, 1, 1)
+		end
+	end)
+end
+
+-- ♻️ Mutation reroll with single ESP
 local function animateMutationReroll()
-	reroll.Text = "⏳ Rerolling..."
+	rerollBtn.Text = "⏳ Rerolling..."
+	local machines = getMutationMachines()
+	if #machines == 0 then return end
+
 	local duration = 2
 	local interval = 0.1
+	local chosen = machines[math.random(#machines)]
+
 	for i = 1, math.floor(duration / interval) do
-		espLabel.Text = mutations[math.random(#mutations)]
+		local temp = mutations[math.random(#mutations)]
+		if activeESP and activeESP:FindFirstChildOfClass("TextLabel") then
+			activeESP.TextLabel.Text = temp
+		end
 		wait(interval)
 	end
+
 	currentMutation = mutations[math.random(#mutations)]
-	espLabel.Text = currentMutation
-	reroll.Text = "🎲 Mutation Reroll"
+	applyMutationESP(chosen)
+	rerollBtn.Text = "🎲 Mutation Reroll"
 end
 
-toggle.MouseButton1Click:Connect(function()
+-- 🟡 Toggle ESP visibility
+toggleBtn.MouseButton1Click:Connect(function()
 	espVisible = not espVisible
-	espGui.Enabled = espVisible
+	if activeESP then
+		activeESP.Enabled = espVisible
+	end
 end)
 
-reroll.MouseButton1Click:Connect(animateMutationReroll)
+-- 🔁 Button hook
+rerollBtn.MouseButton1Click:Connect(animateMutationReroll)
